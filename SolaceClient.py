@@ -38,21 +38,19 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any
 
 try:
-    import solace.messaging.messaging_service as messaging
-    from solace.messaging.config.solace_properties import service_properties
-    from solace.messaging.config.solace_properties import transport_layer_properties
-    from solace.messaging.config.solace_properties import authentication_properties
-    from solace.messaging.publisher.persistent_message_publisher import PersistentMessagePublisher
-    from solace.messaging.receiver.persistent_message_receiver import PersistentMessageReceiver
-    from solace.messaging.receiver.direct_message_receiver import DirectMessageReceiver
-    from solace.messaging.publisher.direct_message_publisher import DirectMessagePublisher
+    from solace.messaging.messaging_service import MessagingService
+    from solace.messaging.config.authentication_strategy import BasicUserNamePasswordAuthentication, OAuth2Authentication, ClientCertificateAuthentication
+    from solace.messaging.config.transport_security_strategy import TLS
     from solace.messaging.resources.queue import Queue
     from solace.messaging.resources.topic_subscription import TopicSubscription
-    from solace.messaging.config.receiver_properties import ReceiverProperties
-    from solace.messaging.config.publisher_properties import PublisherProperties
-    from solace.messaging.config.transport_layer_security_properties import TLSProperties
-except ImportError:
-    print("Error: solace-pubsubplus library not found. Install with: pip install solace-pubsubplus")
+    from solace.messaging.receiver.persistent_message_receiver import PersistentMessageReceiver
+    from solace.messaging.receiver.direct_message_receiver import DirectMessageReceiver
+    from solace.messaging.publisher.persistent_message_publisher import PersistentMessagePublisher
+    from solace.messaging.publisher.direct_message_publisher import DirectMessagePublisher
+except ImportError as e:
+    print("Error: solace-pubsubplus library not found or import failed.")
+    print(f"Import error: {e}")
+    print("Install with: pip install solace-pubsubplus")
     sys.exit(1)
 
 
@@ -90,63 +88,41 @@ class SolacePenTest:
     def connect(self) -> bool:
         """Establish connection to Solace broker."""
         try:
-            # Build service properties
+            # Build service properties dictionary with correct protocol
+            protocol = "tcps" if self.use_tls else "tcp"
             service_props = {
-                service_properties.HOST: f"{self.host}:{self.port}",
-                service_properties.VPN_NAME: self.vpn,
-                service_properties.RECEIVER_DIRECT_SUBSCRIPTION_REAPPLY: True
+                "solace.messaging.service.host": f"{protocol}://{self.host}:{self.port}",
+                "solace.messaging.service.vpn-name": self.vpn,
+                "solace.messaging.service.receiver.direct.subscription-reapply": True
             }
             
-            # Transport layer properties
-            if self.use_tls:
-                transport_props = {
-                    transport_layer_properties.HOST: f"tcps://{self.host}:{self.port}",
-                    transport_layer_properties.TRUST_STORE_PATH: "",  # Empty to disable cert validation
-                    transport_layer_properties.SSL_VALIDATE_CERTIFICATE: False,
-                    transport_layer_properties.SSL_VALIDATE_CERTIFICATE_DATE: False
-                }
-                
-                # Add client certificate if provided
-                if self.cert_file:
-                    transport_props.update({
-                        transport_layer_properties.SSL_KEY_STORE_PATH: self.cert_file,
-                        transport_layer_properties.SSL_KEY_STORE_PASSWORD: self.cert_password or ""
-                    })
-            else:
-                transport_props = {
-                    transport_layer_properties.HOST: f"tcp://{self.host}:{self.port}"
-                }
-            
             # Create messaging service builder
-            builder = messaging.MessagingService.builder().from_properties(service_props)
+            builder = MessagingService.builder().from_properties(service_props)
             
             # Choose authentication strategy
             if self.oauth_token:
                 # OAuth token authentication
                 print("Using OAuth token authentication")
-                builder = builder.with_authentication_strategy(
-                    messaging.OAuth2Authentication.of(self.oauth_token)
-                )
+                auth_strategy = OAuth2Authentication.of(self.oauth_token)
             elif self.cert_file:
                 # Client certificate authentication
                 print("Using client certificate authentication")
-                builder = builder.with_authentication_strategy(
-                    messaging.ClientCertificateAuthentication.of(
-                        self.cert_file, self.cert_password or ""
-                    )
+                auth_strategy = ClientCertificateAuthentication.of(
+                    self.cert_file, self.cert_password or ""
                 )
             else:
                 # Basic username/password authentication
                 print("Using basic username/password authentication")
-                builder = builder.with_authentication_strategy(
-                    messaging.BasicUserNamePasswordAuthentication.of(
-                        self.username, self.password
-                    )
+                auth_strategy = BasicUserNamePasswordAuthentication.of(
+                    self.username, self.password
                 )
+            
+            builder = builder.with_authentication_strategy(auth_strategy)
             
             # Add TLS if enabled
             if self.use_tls:
-                builder = builder.with_transport_layer_security_strategy(messaging.TLS.create())
+                tls_strategy = TLS.create().without_certificate_validation()
+                builder = builder.with_transport_layer_security_strategy(tls_strategy)
             
             # Build and connect
             self.messaging_service = builder.build()
@@ -283,33 +259,31 @@ class SolacePenTest:
             if test_vpn != self.vpn:
                 try:
                     # Create a new service for cross-VPN testing
+                    protocol = "tcps" if self.use_tls else "tcp"
                     test_service_props = {
-                        service_properties.HOST: f"{self.host}:{self.port}",
-                        service_properties.VPN_NAME: test_vpn,
-                        service_properties.RECEIVER_DIRECT_SUBSCRIPTION_REAPPLY: True
+                        "solace.messaging.service.host": f"{protocol}://{self.host}:{self.port}",
+                        "solace.messaging.service.vpn-name": test_vpn,
+                        "solace.messaging.service.receiver.direct.subscription-reapply": True
                     }
                     
-                    test_builder = messaging.MessagingService.builder().from_properties(test_service_props)
+                    test_builder = MessagingService.builder().from_properties(test_service_props)
                     
                     if self.oauth_token:
-                        test_builder = test_builder.with_authentication_strategy(
-                            messaging.OAuth2Authentication.of(self.oauth_token)
-                        )
+                        auth_strategy = OAuth2Authentication.of(self.oauth_token)
                     elif self.cert_file:
-                        test_builder = test_builder.with_authentication_strategy(
-                            messaging.ClientCertificateAuthentication.of(
-                                self.cert_file, self.cert_password or ""
-                            )
+                        auth_strategy = ClientCertificateAuthentication.of(
+                            self.cert_file, self.cert_password or ""
                         )
                     else:
-                        test_builder = test_builder.with_authentication_strategy(
-                            messaging.BasicUserNamePasswordAuthentication.of(
-                                self.username, self.password
-                            )
+                        auth_strategy = BasicUserNamePasswordAuthentication.of(
+                            self.username, self.password
                         )
                     
+                    test_builder = test_builder.with_authentication_strategy(auth_strategy)
+                    
                     if self.use_tls:
-                        test_builder = test_builder.with_transport_layer_security_strategy(messaging.TLS.create())
+                        tls_strategy = TLS.create().without_certificate_validation()
+                        test_builder = test_builder.with_transport_layer_security_strategy(tls_strategy)
                     
                     test_service = test_builder.build()
                     test_service.connect()
