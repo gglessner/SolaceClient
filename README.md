@@ -19,7 +19,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - **Authorization Testing**: Test access to administrative topics and queues
 - **Cross-VPN Testing**: Validate VPN isolation and access controls
 - **Information Gathering**: Collect broker connection details
-- **Non-destructive Queue Monitoring**: Read from queues without consuming messages
+- **Queue Monitoring**: Monitor queue messages (WARNING: Destructive - consumes messages)
 - **Topic Subscription**: Subscribe to specific topics or wildcard patterns
 - **Message Logging**: Save intercepted messages to timestamped files
 - **Message Replay**: Send captured messages back to their original destinations
@@ -141,12 +141,16 @@ python SolaceClient.py --server hostname:55443 --username testuser --vpn default
     --subscribe-wildcard "telemetry/" -dir ./telemetry_logs
 ```
 
-### Monitor Queues Non-destructively
+### Monitor Queues (Destructive - Consumes Messages)
+
+**⚠️ WARNING: This operation consumes/removes messages from queues!**
 
 ```bash
 python SolaceClient.py --server hostname:55443 --username testuser --vpn default \
     --monitor-queues queue1 queue2 -dir ./queue_messages
 ```
+
+**Note**: The Solace Python API does not support non-destructive queue browsing. Messages will be permanently removed from the queue.
 
 ### Replay Captured Messages
 
@@ -200,7 +204,7 @@ python SolaceSEMP.py --server hostname:8080 --username admin --test-admin-access
 - `--validate` - Test connection and exit
 - `--info` - Gather and display broker information
 - `--check-auth` - Test authorization against administrative resources
-- `--monitor-queues QUEUE [QUEUE ...]` - Monitor specified queues
+- `--monitor-queues QUEUE [QUEUE ...]` - Monitor specified queues (WARNING: Destructive - consumes messages)
 - `--monitor-topics TOPIC [TOPIC ...]` - Monitor specified topics
 - `--subscribe-wildcard PREFIX` - Subscribe to topics starting with prefix
 - `--send-from-files DIRECTORY` - Replay messages from logged files
@@ -257,10 +261,12 @@ Captured messages are saved as JSON files with the following structure:
 
 ## Limitations
 
+- **Queue monitoring is DESTRUCTIVE** - messages are consumed/removed from queues (Solace Python API limitation)
 - Queue monitoring requires appropriate permissions on the target broker
 - Some broker information gathering features require administrative access
 - Wildcard subscriptions follow Solace topic syntax rules
 - Message replay preserves original content but may not preserve all message properties
+- For non-destructive queue browsing, use alternative tools like Solace's PrettyDump or Java-based solutions
 
 ## Getting Help
 

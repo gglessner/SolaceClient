@@ -91,7 +91,7 @@ class SolacePenTest:
             # Build service properties dictionary with correct protocol
             protocol = "tcps" if self.use_tls else "tcp"
             service_props = {
-                "solace.messaging.service.host": f"{protocol}://{self.host}:{self.port}",
+                "solace.messaging.transport.host": f"{protocol}://{self.host}:{self.port}",
                 "solace.messaging.service.vpn-name": self.vpn,
                 "solace.messaging.service.receiver.direct.subscription-reapply": True
             }
@@ -261,7 +261,7 @@ class SolacePenTest:
                     # Create a new service for cross-VPN testing
                     protocol = "tcps" if self.use_tls else "tcp"
                     test_service_props = {
-                        "solace.messaging.service.host": f"{protocol}://{self.host}:{self.port}",
+                        "solace.messaging.transport.host": f"{protocol}://{self.host}:{self.port}",
                         "solace.messaging.service.vpn-name": test_vpn,
                         "solace.messaging.service.receiver.direct.subscription-reapply": True
                     }
@@ -303,12 +303,24 @@ class SolacePenTest:
         return auth_results
     
     def monitor_queues(self, queue_names: List[str], output_dir: Optional[str] = None):
-        """Monitor messages from specified queues non-destructively."""
+        """Monitor messages from specified queues (WARNING: DESTRUCTIVE - messages will be consumed/removed)."""
         if not self.is_connected:
             if not self.connect():
                 return
         
-        print(f"Starting non-destructive monitoring of queues: {queue_names}")
+        print(f"WARNING: Starting DESTRUCTIVE monitoring of queues (messages will be consumed): {queue_names}")
+        print("NOTE: Solace Python API does not support non-destructive queue browsing")
+        
+        # Safety confirmation for production environments
+        try:
+            confirmation = input("Continue with DESTRUCTIVE queue monitoring? (yes/no): ").lower().strip()
+            if confirmation not in ['yes', 'y']:
+                print("Queue monitoring cancelled by user")
+                return
+        except KeyboardInterrupt:
+            print("\nQueue monitoring cancelled by user")
+            return
+        
         if output_dir:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             print(f"Messages will be logged to: {output_dir}")
@@ -531,7 +543,7 @@ def main():
     parser.add_argument("--validate", action="store_true", help="Validate broker connection and exit")
     parser.add_argument("--info", action="store_true", help="Gather broker information")
     parser.add_argument("--check-auth", action="store_true", help="Test authorization against administrative resources")
-    parser.add_argument("--monitor-queues", nargs="+", help="Monitor specified queues (non-destructive)")
+    parser.add_argument("--monitor-queues", nargs="+", help="Monitor specified queues (WARNING: DESTRUCTIVE - consumes messages)")
     parser.add_argument("--monitor-topics", nargs="+", help="Monitor specified topics")
     parser.add_argument("--subscribe-wildcard", help="Subscribe to topics starting with specified string")
     parser.add_argument("--send-from-files", help="Send messages from logged files in specified directory")
