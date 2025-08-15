@@ -39,7 +39,7 @@ from typing import Optional, Dict, List, Any
 
 try:
     from solace.messaging.messaging_service import MessagingService
-    from solace.messaging.config.authentication_strategy import BasicUserNamePasswordAuthentication, OAuth2Authentication, ClientCertificateAuthentication
+    from solace.messaging.config.authentication_strategy import BasicUserNamePassword, OAuth2, ClientCertificateAuthentication
     from solace.messaging.config.transport_security_strategy import TLS
     from solace.messaging.resources.queue import Queue
     from solace.messaging.resources.topic_subscription import TopicSubscription
@@ -103,7 +103,7 @@ class SolacePenTest:
             if self.oauth_token:
                 # OAuth token authentication
                 print("Using OAuth token authentication")
-                auth_strategy = OAuth2Authentication.of(self.oauth_token)
+                auth_strategy = OAuth2.of(self.oauth_token)
             elif self.cert_file:
                 # Client certificate authentication
                 print("Using client certificate authentication")
@@ -113,7 +113,7 @@ class SolacePenTest:
             else:
                 # Basic username/password authentication
                 print("Using basic username/password authentication")
-                auth_strategy = BasicUserNamePasswordAuthentication.of(
+                auth_strategy = BasicUserNamePassword.of(
                     self.username, self.password
                 )
             
@@ -269,13 +269,13 @@ class SolacePenTest:
                     test_builder = MessagingService.builder().from_properties(test_service_props)
                     
                     if self.oauth_token:
-                        auth_strategy = OAuth2Authentication.of(self.oauth_token)
+                        auth_strategy = OAuth2.of(self.oauth_token)
                     elif self.cert_file:
                         auth_strategy = ClientCertificateAuthentication.of(
                             self.cert_file, self.cert_password or ""
                         )
                     else:
-                        auth_strategy = BasicUserNamePasswordAuthentication.of(
+                        auth_strategy = BasicUserNamePassword.of(
                             self.username, self.password
                         )
                     
