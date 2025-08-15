@@ -122,7 +122,7 @@ class SolacePenTest:
             # Add TLS if enabled
             if self.use_tls:
                 tls_strategy = TLS.create().without_certificate_validation()
-                builder = builder.with_transport_layer_security_strategy(tls_strategy)
+                builder = builder.with_transport_security_strategy(tls_strategy)
             
             # Build and connect
             self.messaging_service = builder.build()
@@ -152,11 +152,11 @@ class SolacePenTest:
         print(f"Validating connection to {self.host}:{self.port} with user '{self.username}' on VPN '{self.vpn}'...")
         
         if self.connect():
-            print("✓ Connection validation successful")
+            print("Connection validation successful")
             self.disconnect()
             return True
         else:
-            print("✗ Connection validation failed")
+            print("Connection validation failed")
             return False
     
     def get_broker_info(self) -> Dict[str, Any]:
@@ -233,10 +233,10 @@ class SolacePenTest:
                 auth_results["admin_topics"][topic] = "ACCESS_GRANTED"
                 auth_results["unauthorized_access"].append(f"Unauthorized access to admin topic: {topic}")
                 receiver.terminate()
-                print(f"⚠️  WARNING: Gained access to admin topic: {topic}")
+                print(f"WARNING: Gained access to admin topic: {topic}")
             except Exception as e:
                 auth_results["admin_topics"][topic] = f"ACCESS_DENIED: {str(e)}"
-                print(f"✓ Properly denied access to admin topic: {topic}")
+                print(f"OK: Properly denied access to admin topic: {topic}")
         
         # Test queue access
         for queue_name in admin_queues:
@@ -248,10 +248,10 @@ class SolacePenTest:
                 auth_results["admin_queues"][queue_name] = "ACCESS_GRANTED"
                 auth_results["unauthorized_access"].append(f"Unauthorized access to admin queue: {queue_name}")
                 receiver.terminate()
-                print(f"⚠️  WARNING: Gained access to admin queue: {queue_name}")
+                print(f"WARNING: Gained access to admin queue: {queue_name}")
             except Exception as e:
                 auth_results["admin_queues"][queue_name] = f"ACCESS_DENIED: {str(e)}"
-                print(f"✓ Properly denied access to admin queue: {queue_name}")
+                print(f"OK: Properly denied access to admin queue: {queue_name}")
         
         # Test cross-VPN access (if applicable)
         test_vpns = ["default", "mgmt", "admin", "system"]
@@ -283,22 +283,22 @@ class SolacePenTest:
                     
                     if self.use_tls:
                         tls_strategy = TLS.create().without_certificate_validation()
-                        test_builder = test_builder.with_transport_layer_security_strategy(tls_strategy)
+                        test_builder = test_builder.with_transport_security_strategy(tls_strategy)
                     
                     test_service = test_builder.build()
                     test_service.connect()
                     
                     auth_results["unauthorized_access"].append(f"Cross-VPN access gained to VPN: {test_vpn}")
-                    print(f"⚠️  WARNING: Cross-VPN access to {test_vpn} from {self.vpn}")
+                    print(f"WARNING: Cross-VPN access to {test_vpn} from {self.vpn}")
                     test_service.disconnect()
                     
                 except Exception as e:
-                    print(f"✓ Properly denied cross-VPN access to: {test_vpn}")
+                    print(f"OK: Properly denied cross-VPN access to: {test_vpn}")
         
         if auth_results["unauthorized_access"]:
-            print(f"\n🚨 SECURITY ISSUES FOUND: {len(auth_results['unauthorized_access'])} unauthorized access attempts succeeded")
+            print(f"\nSECURITY ISSUES FOUND: {len(auth_results['unauthorized_access'])} unauthorized access attempts succeeded")
         else:
-            print("\n✅ Authorization checks passed - no unauthorized access detected")
+            print("\nAuthorization checks passed - no unauthorized access detected")
         
         return auth_results
     

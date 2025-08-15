@@ -103,28 +103,28 @@ class SolaceSEMPTester:
             
             if response.status_code == 200:
                 api_info = response.json()
-                print("✓ SEMP API connection successful")
+                print("OK: SEMP API connection successful")
                 print(f"  API Version: {api_info.get('data', {}).get('sempVersion', 'Unknown')}")
                 print(f"  Platform: {api_info.get('data', {}).get('platform', 'Unknown')}")
                 return True
             elif response.status_code == 401:
-                print("✗ Authentication failed - Invalid credentials")
+                print("ERROR: Authentication failed - Invalid credentials")
                 return False
             elif response.status_code == 403:
-                print("✗ Access forbidden - Insufficient permissions")
+                print("ERROR: Access forbidden - Insufficient permissions")
                 return False
             else:
-                print(f"✗ Connection failed - HTTP {response.status_code}: {response.text}")
+                print(f"ERROR: Connection failed - HTTP {response.status_code}: {response.text}")
                 return False
                 
         except requests.exceptions.Timeout:
-            print("✗ Connection timeout - SEMP API may not be available")
+            print("ERROR: Connection timeout - SEMP API may not be available")
             return False
         except requests.exceptions.ConnectionError:
-            print("✗ Connection error - Cannot reach SEMP API endpoint")
+            print("ERROR: Connection error - Cannot reach SEMP API endpoint")
             return False
         except Exception as e:
-            print(f"✗ Unexpected error: {e}")
+            print(f"ERROR: Unexpected error: {e}")
             return False
     
     def enumerate_brokers(self) -> Dict[str, Any]:
@@ -145,7 +145,7 @@ class SolaceSEMPTester:
                 
                 for broker in brokers:
                     broker_name = broker.get('brokerName', 'Unknown')
-                    print(f"✓ Found broker: {broker_name}")
+                    print(f"Found broker: {broker_name}")
                     
                     broker_info = {
                         "name": broker_name,
@@ -161,12 +161,12 @@ class SolaceSEMPTester:
             else:
                 error_msg = f"Failed to enumerate brokers: HTTP {response.status_code}"
                 results["errors"].append(error_msg)
-                print(f"✗ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 
         except Exception as e:
             error_msg = f"Error enumerating brokers: {e}"
             results["errors"].append(error_msg)
-            print(f"✗ {error_msg}")
+            print(f"ERROR: {error_msg}")
         
         return results
     
@@ -188,7 +188,7 @@ class SolaceSEMPTester:
                 
                 for vpn in vpns:
                     vpn_name = vpn.get('msgVpnName', 'Unknown')
-                    print(f"✓ Found VPN: {vpn_name}")
+                    print(f"Found VPN: {vpn_name}")
                     
                     vpn_info = {
                         "name": vpn_name,
@@ -207,12 +207,12 @@ class SolaceSEMPTester:
             else:
                 error_msg = f"Failed to enumerate VPNs: HTTP {response.status_code}"
                 results["errors"].append(error_msg)
-                print(f"✗ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 
         except Exception as e:
             error_msg = f"Error enumerating VPNs: {e}"
             results["errors"].append(error_msg)
-            print(f"✗ {error_msg}")
+            print(f"ERROR: {error_msg}")
         
         return results
     
@@ -246,7 +246,7 @@ class SolaceSEMPTester:
                         users = response.json().get('data', [])
                         for user in users:
                             username = user.get('clientUsername', 'Unknown')
-                            print(f"✓ Found user: {username} (VPN: {vpn_name})")
+                            print(f"Found user: {username} (VPN: {vpn_name})")
                             
                             user_info = {
                                 "username": username,
@@ -270,7 +270,7 @@ class SolaceSEMPTester:
                 users = response.json().get('data', [])
                 for user in users:
                     username = user.get('clientUsername', 'Unknown')
-                    print(f"✓ Found user: {username}")
+                    print(f"Found user: {username}")
                     
                     user_info = {
                         "username": username,
@@ -287,12 +287,12 @@ class SolaceSEMPTester:
             else:
                 error_msg = f"Failed to enumerate users: HTTP {response.status_code}"
                 results["errors"].append(error_msg)
-                print(f"✗ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 
         except Exception as e:
             error_msg = f"Error enumerating users: {e}"
             results["errors"].append(error_msg)
-            print(f"✗ {error_msg}")
+            print(f"ERROR: {error_msg}")
         
         return results
     
@@ -313,7 +313,7 @@ class SolaceSEMPTester:
                 profiles = response.json().get('data', [])
                 for profile in profiles:
                     profile_name = profile.get('aclProfileName', 'Unknown')
-                    print(f"✓ Found ACL profile: {profile_name}")
+                    print(f"Found ACL profile: {profile_name}")
                     
                     profile_info = {
                         "name": profile_name,
@@ -329,12 +329,12 @@ class SolaceSEMPTester:
             else:
                 error_msg = f"Failed to enumerate ACL profiles: HTTP {response.status_code}"
                 results["errors"].append(error_msg)
-                print(f"✗ {error_msg}")
+                print(f"ERROR: {error_msg}")
                 
         except Exception as e:
             error_msg = f"Error enumerating ACL profiles: {e}"
             results["errors"].append(error_msg)
-            print(f"✗ {error_msg}")
+            print(f"ERROR: {error_msg}")
         
         return results
     
@@ -376,13 +376,13 @@ class SolaceSEMPTester:
                 }
                 
                 if response.status_code == 200:
-                    print(f"⚠️  ADMIN ACCESS: {description} - {endpoint}")
+                    print(f"WARNING: ADMIN ACCESS: {description} - {endpoint}")
                     test_result["security_risk"] = "HIGH"
                 elif response.status_code == 401:
-                    print(f"✓ Properly protected: {description}")
+                    print(f"OK: Properly protected: {description}")
                     test_result["security_risk"] = "NONE"
                 elif response.status_code == 403:
-                    print(f"✓ Access forbidden: {description}")
+                    print(f"OK: Access forbidden: {description}")
                     test_result["security_risk"] = "LOW"
                 else:
                     print(f"? Unexpected response for {description}: HTTP {response.status_code}")
@@ -393,7 +393,7 @@ class SolaceSEMPTester:
             except Exception as e:
                 error_msg = f"Error testing {endpoint}: {e}"
                 results["errors"].append(error_msg)
-                print(f"✗ {error_msg}")
+                print(f"ERROR: {error_msg}")
         
         return results
     
@@ -435,7 +435,7 @@ class SolaceSEMPTester:
         try:
             with open(output_file, 'w') as f:
                 json.dump(report, f, indent=2)
-            print(f"✓ Security report saved to: {output_file}")
+            print(f"Security report saved to: {output_file}")
             
             # Print summary
             print(f"\n=== Security Assessment Summary ===")
@@ -446,14 +446,14 @@ class SolaceSEMPTester:
             print(f"Brokers Found: {report['security_summary']['broker_count']}")
             
             if security_issues:
-                print(f"\n🚨 CRITICAL SECURITY ISSUES:")
+                print(f"\nCRITICAL SECURITY ISSUES:")
                 for issue in security_issues:
                     print(f"  - {issue}")
             else:
-                print(f"\n✅ No critical security issues detected")
+                print(f"\nNo critical security issues detected")
                 
         except Exception as e:
-            print(f"✗ Error saving report: {e}")
+            print(f"ERROR: Error saving report: {e}")
 
 
 def main():
