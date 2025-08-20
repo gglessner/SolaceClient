@@ -33,6 +33,13 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 - **Security Reporting**: Generate detailed JSON security assessment reports
 - **Production Safe**: Non-destructive testing suitable for production environments
 
+### SolaceVPNscan.py - VPN Enumeration
+- **VPN Discovery**: Enumerate valid VPN names on Solace brokers
+- **Error Analysis**: Determines VPN existence based on authentication error responses
+- **Batch Processing**: Test multiple VPNs from a text file
+- **CSV Reporting**: Export results to CSV format for analysis
+- **Production Safe**: Uses anonymous authentication attempts, no valid credentials required
+
 ## Installation
 
 ### Prerequisites
@@ -186,6 +193,19 @@ python SolaceSEMP.py --server hostname:8080 --username admin --enumerate-all --o
 python SolaceSEMP.py --server hostname:8080 --username admin --test-admin-access
 ```
 
+### VPN Enumeration
+
+```bash
+# Basic VPN enumeration
+python SolaceVPNscan.py --server hostname:55443 --vpn-list vpn_names.txt
+
+# VPN enumeration with CSV output
+python SolaceVPNscan.py --server hostname:55443 --vpn-list vpn_names.txt --csv vpn_results.csv
+
+# VPN enumeration without TLS
+python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.txt --csv results.csv
+```
+
 ## Command Line Options
 
 ### SolaceClient.py - Data Plane Testing
@@ -234,6 +254,22 @@ python SolaceSEMP.py --server hostname:8080 --username admin --test-admin-access
 
 #### Output Options
 - `--output, -o FILE` - Output file for security report (JSON format)
+
+### SolaceVPNscan.py - VPN Enumeration
+
+#### Connection Parameters
+- `--server HOST:PORT` - Solace server address (required)
+- `--no-tls` - Use unencrypted connection
+
+#### Input/Output Options
+- `--vpn-list FILE` - Text file containing VPN names, one per line (required)
+- `--case-variations` - Generate lowercase, uppercase, and title case variations of each VPN name
+- `--csv FILE` - Save results to CSV file
+
+#### Important Notes
+- **VPN names are case-sensitive** in Solace (e.g., "default" ≠ "Default" ≠ "DEFAULT")
+- Use `--case-variations` to automatically test common case variations
+- Consider testing both common naming patterns and case variations for thorough enumeration
 
 ## Security Considerations
 
