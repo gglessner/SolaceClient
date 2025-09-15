@@ -91,6 +91,7 @@ class SolacePenTest:
         except Exception:
             return False
     
+    
     def _signal_handler(self, signum, frame):
         """Handle Ctrl+C gracefully."""
         print("\nReceived interrupt signal. Shutting down gracefully...")
@@ -133,19 +134,23 @@ class SolacePenTest:
                     raise ValueError("JKS files not supported - convert to PEM format first")
                 
                 elif self.cert_file.lower().endswith(('.p12', '.pfx')):
-                    # PKCS12 files contain both cert and key
-                    # For PKCS12, we need to use the same file for both cert and key parameters
-                    auth_strategy = ClientCertificateAuthentication.of(
-                        self.cert_file, self.cert_file, self.cert_password or None
-                    )
+                    # PKCS12 files are not supported by ClientCertificateAuthentication.of()
+                    # User needs to convert to PEM format first
+                    print("ERROR: PKCS12 files (.p12, .pfx) require conversion to PEM format.")
+                    print("Convert your PKCS12 file to PEM format:")
+                    print("1. Extract certificate: openssl pkcs12 -in file.p12 -clcerts -nokeys -out cert.pem")
+                    print("2. Extract private key: openssl pkcs12 -in file.p12 -nocerts -out key.pem")
+                    print("3. Use: --cert-file cert.pem --key-file key.pem")
+                    raise ValueError("PKCS12 files not supported - convert to PEM format first")
                 else:
-                    # PEM files - check if they contain private key or need separate key file
+                    # PEM files - require separate certificate and key files
                     if self._pem_contains_private_key(self.cert_file):
-                        # PEM file contains both cert and private key
-                        # Use the same file for both cert and key parameters
-                        auth_strategy = ClientCertificateAuthentication.of(
-                            self.cert_file, self.cert_file, self.cert_password or None
-                        )
+                        print("ERROR: PEM files containing both certificate and private key are not supported.")
+                        print("Please split your PEM file into separate certificate and key files:")
+                        print("1. Extract certificate: openssl x509 -in combined.pem -out cert.pem")
+                        print("2. Extract private key: openssl pkey -in combined.pem -out key.pem")
+                        print("3. Use: --cert-file cert.pem --key-file key.pem")
+                        raise ValueError("Combined PEM files not supported - split into separate files")
                     else:
                         # PEM file only contains certificate, need separate key file
                         if not hasattr(self, 'key_file') or not self.key_file:
@@ -319,19 +324,13 @@ class SolacePenTest:
                     elif self.cert_file:
                         # Handle different certificate file types for cross-VPN testing
                         if self.cert_file.lower().endswith(('.p12', '.pfx')):
-                            # PKCS12 files contain both cert and key
-                            # For PKCS12, we need to use the same file for both cert and key parameters
-                            auth_strategy = ClientCertificateAuthentication.of(
-                                self.cert_file, self.cert_file, self.cert_password or None
-                            )
+                            # PKCS12 files not supported
+                            continue  # Skip this VPN test
                         else:
                             # PEM files - check if they contain private key or need separate key file
                             if self._pem_contains_private_key(self.cert_file):
-                                # PEM file contains both cert and private key
-                                # Use the same file for both cert and key parameters
-                                auth_strategy = ClientCertificateAuthentication.of(
-                                    self.cert_file, self.cert_file, self.cert_password or None
-                                )
+                                # Combined PEM files not supported
+                                continue  # Skip this VPN test
                             else:
                                 # PEM file only contains certificate, need separate key file
                                 if not hasattr(self, 'key_file') or not self.key_file:
