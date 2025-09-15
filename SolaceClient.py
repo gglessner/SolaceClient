@@ -136,7 +136,7 @@ class SolacePenTest:
                     # PKCS12 files contain both cert and key
                     # For PKCS12, we need to use the same file for both cert and key parameters
                     auth_strategy = ClientCertificateAuthentication.of(
-                        self.cert_file, self.cert_file, self.cert_password or ""
+                        self.cert_file, self.cert_file, self.cert_password or None
                     )
                 else:
                     # PEM files - check if they contain private key or need separate key file
@@ -144,7 +144,7 @@ class SolacePenTest:
                         # PEM file contains both cert and private key
                         # Use the same file for both cert and key parameters
                         auth_strategy = ClientCertificateAuthentication.of(
-                            self.cert_file, self.cert_file, self.cert_password or ""
+                            self.cert_file, self.cert_file, self.cert_password or None
                         )
                     else:
                         # PEM file only contains certificate, need separate key file
@@ -154,7 +154,7 @@ class SolacePenTest:
                             raise ValueError("PEM certificate requires --key-file parameter")
                         
                         auth_strategy = ClientCertificateAuthentication.of(
-                            self.cert_file, self.key_file, self.cert_password or ""
+                            self.cert_file, self.key_file, self.cert_password or None
                         )
             else:
                 # Basic username/password authentication
@@ -322,7 +322,7 @@ class SolacePenTest:
                             # PKCS12 files contain both cert and key
                             # For PKCS12, we need to use the same file for both cert and key parameters
                             auth_strategy = ClientCertificateAuthentication.of(
-                                self.cert_file, self.cert_file, self.cert_password or ""
+                                self.cert_file, self.cert_file, self.cert_password or None
                             )
                         else:
                             # PEM files - check if they contain private key or need separate key file
@@ -330,7 +330,7 @@ class SolacePenTest:
                                 # PEM file contains both cert and private key
                                 # Use the same file for both cert and key parameters
                                 auth_strategy = ClientCertificateAuthentication.of(
-                                    self.cert_file, self.cert_file, self.cert_password or ""
+                                    self.cert_file, self.cert_file, self.cert_password or None
                                 )
                             else:
                                 # PEM file only contains certificate, need separate key file
@@ -338,7 +338,7 @@ class SolacePenTest:
                                     continue  # Skip this VPN test if key file not available
                                 
                                 auth_strategy = ClientCertificateAuthentication.of(
-                                    self.cert_file, self.key_file, self.cert_password or ""
+                                    self.cert_file, self.key_file, self.cert_password or None
                                 )
                     else:
                         auth_strategy = BasicUserNamePassword.of(
