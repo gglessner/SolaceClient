@@ -119,6 +119,44 @@ pip install --upgrade solace-pubsubplus
 - Make sure you have permission to access the specified queues and topics
 - Some operations may require administrative privileges on the broker
 
+## Certificate File Formats
+
+The tools support multiple certificate file formats:
+
+### Supported Formats
+- **PEM files** (`.pem`, `.crt`, `.key`): Can contain certificate only, private key only, or both
+- **PKCS12 files** (`.p12`, `.pfx`): Contain both certificate and private key in a single encrypted file
+
+### JKS Files (Not Supported)
+Java KeyStore (`.jks`) files are not supported by the Solace Python API. If you have a JKS file, convert it to PEM format:
+
+```bash
+# 1. Convert JKS to PKCS12
+keytool -importkeystore -srckeystore keystore.jks -destkeystore keystore.p12 -srcstoretype jks -deststoretype pkcs12
+
+# 2. Extract certificate
+openssl pkcs12 -in keystore.p12 -clcerts -nokeys -out cert.pem
+
+# 3. Extract private key
+openssl pkcs12 -in keystore.p12 -nocerts -out key.pem
+
+# 4. Use with the tool
+python SolaceClient.py --server host:55443 --cert-file cert.pem --key-file key.pem --vpn default --validate
+```
+
+### Certificate Usage Examples
+
+```bash
+# Single PEM file with both certificate and private key
+python SolaceClient.py --server host:55443 --cert-file client.pem --vpn default --validate
+
+# Separate PEM files (certificate and private key)
+python SolaceClient.py --server host:55443 --cert-file cert.pem --key-file key.pem --vpn default --validate
+
+# PKCS12 file (may prompt for password)
+python SolaceClient.py --server host:55443 --cert-file client.p12 --vpn default --validate
+```
+
 ## Usage
 
 ### Basic Connection Validation
@@ -132,6 +170,12 @@ python SolaceClient.py --server hostname:55443 --oauth-token "your-oauth-token" 
 
 # Client certificate authentication
 python SolaceClient.py --server hostname:55443 --cert-file /path/to/client.pem --vpn default --validate
+
+# Client certificate with separate key file (if PEM only contains certificate)
+python SolaceClient.py --server hostname:55443 --cert-file /path/to/cert.pem --key-file /path/to/key.pem --vpn default --validate
+
+# PKCS12 certificate file
+python SolaceClient.py --server hostname:55443 --cert-file /path/to/client.p12 --vpn default --validate
 ```
 
 ### Monitor Topics with Message Logging
@@ -183,8 +227,14 @@ python SolaceClient.py --server hostname:55443 --username testuser --vpn default
 ### SEMP API Testing
 
 ```bash
-# Test SEMP API connection
+# Test SEMP API connection with basic auth
 python SolaceSEMP.py --server hostname:8080 --username admin --test-connection
+
+# Test SEMP API connection with client certificate
+python SolaceSEMP.py --server hostname:8080 --cert-file client.pem --test-connection
+
+# Test SEMP API connection with separate cert and key files
+python SolaceSEMP.py --server hostname:8080 --cert-file cert.pem --key-file key.pem --test-connection
 
 # Comprehensive enumeration
 python SolaceSEMP.py --server hostname:8080 --username admin --enumerate-all --output security_report.json
@@ -219,6 +269,7 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 #### Authentication Options
 - `--oauth-token TOKEN` - OAuth token for authentication
 - `--cert-file PATH` - Client certificate file (PEM/PKCS12 format)
+- `--key-file PATH` - Private key file (required for PEM certificates that don't contain private key)
 
 #### Operations
 - `--validate` - Test connection and exit
@@ -242,6 +293,7 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 #### Authentication Options
 - `--oauth-token TOKEN` - OAuth token for authentication
 - `--cert-file PATH` - Client certificate file (PEM/PKCS12 format)
+- `--key-file PATH` - Private key file (required for PEM certificates that don't contain private key)
 
 #### Operations
 - `--test-connection` - Test SEMP API connection and exit

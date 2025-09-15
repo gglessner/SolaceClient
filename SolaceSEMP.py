@@ -45,7 +45,7 @@ class SolaceSEMPTester:
     
     def __init__(self, host: str, port: int, username: str, password: str, use_tls: bool = True,
                  oauth_token: Optional[str] = None, cert_file: Optional[str] = None,
-                 cert_password: Optional[str] = None):
+                 cert_password: Optional[str] = None, key_file: Optional[str] = None):
         self.host = host
         self.port = port
         self.username = username
@@ -54,6 +54,7 @@ class SolaceSEMPTester:
         self.oauth_token = oauth_token
         self.cert_file = cert_file
         self.cert_password = cert_password
+        self.key_file = key_file
         
         # Build base URL
         protocol = "https" if use_tls else "http"
@@ -66,6 +67,19 @@ class SolaceSEMPTester:
         # Setup authentication
         self._setup_authentication()
     
+    def _pem_contains_private_key(self, pem_file: str) -> bool:
+        """Check if a PEM file contains a private key."""
+        try:
+            with open(pem_file, 'r') as f:
+                content = f.read()
+                # Look for private key markers
+                return ('-----BEGIN PRIVATE KEY-----' in content or 
+                        '-----BEGIN RSA PRIVATE KEY-----' in content or
+                        '-----BEGIN EC PRIVATE KEY-----' in content or
+                        '-----BEGIN DSA PRIVATE KEY-----' in content)
+        except Exception:
+            return False
+    
     def _setup_authentication(self):
         """Setup authentication for SEMP API requests."""
         if self.oauth_token:
@@ -74,11 +88,40 @@ class SolaceSEMPTester:
             })
             print("Using OAuth token authentication for SEMP API")
         elif self.cert_file:
-            if self.cert_password:
-                self.session.cert = (self.cert_file, self.cert_password)
+            # Handle different certificate file types for SEMP API
+            if self.cert_file.lower().endswith('.jks'):
+                print("ERROR: JKS files are not supported by Solace Python API.")
+                print("Please convert your JKS file to PEM format:")
+                print("1. Convert JKS to PKCS12: keytool -importkeystore -srckeystore file.jks -destkeystore file.p12 -srcstoretype jks -deststoretype pkcs12")
+                print("2. Extract certificate: openssl pkcs12 -in file.p12 -clcerts -nokeys -out cert.pem")
+                print("3. Extract private key: openssl pkcs12 -in file.p12 -nocerts -out key.pem")
+                print("4. Use: --cert-file cert.pem --key-file key.pem")
+                raise ValueError("JKS files not supported - convert to PEM format first")
+            
+            elif self.cert_file.lower().endswith(('.p12', '.pfx')):
+                # PKCS12 files contain both cert and key
+                if self.cert_password:
+                    self.session.cert = (self.cert_file, self.cert_password)
+                else:
+                    self.session.cert = self.cert_file
+                print("Using PKCS12 client certificate authentication for SEMP API")
             else:
-                self.session.cert = self.cert_file
-            print("Using client certificate authentication for SEMP API")
+                # PEM files - check if they contain private key or need separate key file
+                if self._pem_contains_private_key(self.cert_file):
+                    # PEM file contains both cert and private key
+                    self.session.cert = self.cert_file
+                    print("Using PEM client certificate authentication for SEMP API (single file)")
+                else:
+                    # PEM file only contains certificate, need separate key file
+                    if not self.key_file:
+                        print("ERROR: PEM certificate file does not contain a private key.")
+                        print("Use --key-file to specify the private key file.")
+                        raise ValueError("PEM certificate requires --key-file parameter")
+                    
+                    # For PEM files, we need to combine cert and key files
+                    # The requests library expects a tuple of (cert_file, key_file) for PEM files
+                    self.session.cert = (self.cert_file, self.key_file)
+                    print("Using PEM client certificate authentication for SEMP API (separate files)")
         else:
             # Basic authentication
             auth_string = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
@@ -471,6 +514,7 @@ def main():
     # Authentication arguments
     parser.add_argument("--oauth-token", help="OAuth token for authentication")
     parser.add_argument("--cert-file", help="Client certificate file path (PEM/PKCS12 format)")
+    parser.add_argument("--key-file", help="Private key file path (required for PEM certificates)")
     
     # Operation arguments
     parser.add_argument("--test-connection", action="store_true", help="Test SEMP API connection and exit")
@@ -519,7 +563,12 @@ def main():
             if not os.path.exists(args.cert_file):
                 print(f"Error: Certificate file not found: {args.cert_file}")
                 sys.exit(1)
-            cert_password = getpass.getpass("Certificate password (press Enter if none): ")
+            # Only prompt for password if it's a PKCS12 file
+            if args.cert_file.lower().endswith(('.p12', '.pfx')):
+                cert_password = getpass.getpass("Certificate password (press Enter if none): ")
+            else:
+                # PEM files typically don't have passwords
+                cert_password = ""
         elif args.oauth_token:
             # OAuth token provided directly, no additional prompting needed
             pass
@@ -536,7 +585,8 @@ def main():
         use_tls=not args.no_tls,
         oauth_token=args.oauth_token,
         cert_file=args.cert_file,
-        cert_password=cert_password
+        cert_password=cert_password,
+        key_file=args.key_file
     )
     
     try:

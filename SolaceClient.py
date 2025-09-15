@@ -59,7 +59,7 @@ class SolacePenTest:
     
     def __init__(self, host: str, port: int, username: str, password: str, vpn: str, use_tls: bool = True, 
                  oauth_token: Optional[str] = None, cert_file: Optional[str] = None, 
-                 cert_password: Optional[str] = None, check_auth: bool = False):
+                 cert_password: Optional[str] = None, key_file: Optional[str] = None, check_auth: bool = False):
         self.host = host
         self.port = port
         self.username = username
@@ -69,6 +69,7 @@ class SolacePenTest:
         self.oauth_token = oauth_token
         self.cert_file = cert_file
         self.cert_password = cert_password
+        self.key_file = key_file
         self.check_auth = check_auth
         self.messaging_service = None
         self.is_connected = False
@@ -76,6 +77,19 @@ class SolacePenTest:
         
         # Set up signal handler for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
+    
+    def _pem_contains_private_key(self, pem_file: str) -> bool:
+        """Check if a PEM file contains a private key."""
+        try:
+            with open(pem_file, 'r') as f:
+                content = f.read()
+                # Look for private key markers
+                return ('-----BEGIN PRIVATE KEY-----' in content or 
+                        '-----BEGIN RSA PRIVATE KEY-----' in content or
+                        '-----BEGIN EC PRIVATE KEY-----' in content or
+                        '-----BEGIN DSA PRIVATE KEY-----' in content)
+        except Exception:
+            return False
     
     def _signal_handler(self, signum, frame):
         """Handle Ctrl+C gracefully."""
@@ -107,9 +121,39 @@ class SolacePenTest:
             elif self.cert_file:
                 # Client certificate authentication
                 print("Using client certificate authentication")
-                auth_strategy = ClientCertificateAuthentication.of(
-                    self.cert_file, self.cert_password or ""
-                )
+                
+                # Handle different certificate file types
+                if self.cert_file.lower().endswith('.jks'):
+                    print("ERROR: JKS files are not supported by Solace Python API.")
+                    print("Please convert your JKS file to PEM format:")
+                    print("1. Convert JKS to PKCS12: keytool -importkeystore -srckeystore file.jks -destkeystore file.p12 -srcstoretype jks -deststoretype pkcs12")
+                    print("2. Extract certificate: openssl pkcs12 -in file.p12 -clcerts -nokeys -out cert.pem")
+                    print("3. Extract private key: openssl pkcs12 -in file.p12 -nocerts -out key.pem")
+                    print("4. Use: --cert-file cert.pem --key-file key.pem")
+                    raise ValueError("JKS files not supported - convert to PEM format first")
+                
+                elif self.cert_file.lower().endswith(('.p12', '.pfx')):
+                    # PKCS12 files contain both cert and key
+                    auth_strategy = ClientCertificateAuthentication.of(
+                        self.cert_file, self.cert_password or ""
+                    )
+                else:
+                    # PEM files - check if they contain private key or need separate key file
+                    if self._pem_contains_private_key(self.cert_file):
+                        # PEM file contains both cert and private key
+                        auth_strategy = ClientCertificateAuthentication.of(
+                            self.cert_file, self.cert_password or ""
+                        )
+                    else:
+                        # PEM file only contains certificate, need separate key file
+                        if not hasattr(self, 'key_file') or not self.key_file:
+                            print("ERROR: PEM certificate file does not contain a private key.")
+                            print("Use --key-file to specify the private key file.")
+                            raise ValueError("PEM certificate requires --key-file parameter")
+                        
+                        auth_strategy = ClientCertificateAuthentication.of(
+                            self.cert_file, self.key_file, self.cert_password or ""
+                        )
             else:
                 # Basic username/password authentication
                 print("Using basic username/password authentication")
@@ -271,9 +315,26 @@ class SolacePenTest:
                     if self.oauth_token:
                         auth_strategy = OAuth2.of(self.oauth_token)
                     elif self.cert_file:
-                        auth_strategy = ClientCertificateAuthentication.of(
-                            self.cert_file, self.cert_password or ""
-                        )
+                        # Handle different certificate file types for cross-VPN testing
+                        if self.cert_file.lower().endswith(('.p12', '.pfx')):
+                            auth_strategy = ClientCertificateAuthentication.of(
+                                self.cert_file, self.cert_password or ""
+                            )
+                        else:
+                            # PEM files - check if they contain private key or need separate key file
+                            if self._pem_contains_private_key(self.cert_file):
+                                # PEM file contains both cert and private key
+                                auth_strategy = ClientCertificateAuthentication.of(
+                                    self.cert_file, self.cert_password or ""
+                                )
+                            else:
+                                # PEM file only contains certificate, need separate key file
+                                if not hasattr(self, 'key_file') or not self.key_file:
+                                    continue  # Skip this VPN test if key file not available
+                                
+                                auth_strategy = ClientCertificateAuthentication.of(
+                                    self.cert_file, self.key_file, self.cert_password or ""
+                                )
                     else:
                         auth_strategy = BasicUserNamePassword.of(
                             self.username, self.password
@@ -538,6 +599,7 @@ def main():
     # Authentication arguments
     parser.add_argument("--oauth-token", help="OAuth token for authentication")
     parser.add_argument("--cert-file", help="Client certificate file path (PEM/PKCS12 format)")
+    parser.add_argument("--key-file", help="Private key file path (required for PEM certificates)")
     
     # Operation arguments
     parser.add_argument("--validate", action="store_true", help="Validate broker connection and exit")
@@ -585,7 +647,12 @@ def main():
             if not os.path.exists(args.cert_file):
                 print(f"Error: Certificate file not found: {args.cert_file}")
                 sys.exit(1)
-            cert_password = getpass.getpass("Certificate password (press Enter if none): ")
+            # Only prompt for password if it's a PKCS12 file
+            if args.cert_file.lower().endswith(('.p12', '.pfx')):
+                cert_password = getpass.getpass("Certificate password (press Enter if none): ")
+            else:
+                # PEM files typically don't have passwords
+                cert_password = ""
         elif args.oauth_token:
             # OAuth token provided directly, no additional prompting needed
             pass
@@ -604,6 +671,7 @@ def main():
         oauth_token=args.oauth_token,
         cert_file=args.cert_file,
         cert_password=cert_password,
+        key_file=args.key_file,
         check_auth=args.check_auth
     )
     
