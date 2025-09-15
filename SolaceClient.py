@@ -134,15 +134,17 @@ class SolacePenTest:
                 
                 elif self.cert_file.lower().endswith(('.p12', '.pfx')):
                     # PKCS12 files contain both cert and key
+                    # For PKCS12, we need to use the same file for both cert and key parameters
                     auth_strategy = ClientCertificateAuthentication.of(
-                        self.cert_file, self.cert_password or ""
+                        self.cert_file, self.cert_file, self.cert_password or ""
                     )
                 else:
                     # PEM files - check if they contain private key or need separate key file
                     if self._pem_contains_private_key(self.cert_file):
                         # PEM file contains both cert and private key
+                        # Use the same file for both cert and key parameters
                         auth_strategy = ClientCertificateAuthentication.of(
-                            self.cert_file, self.cert_password or ""
+                            self.cert_file, self.cert_file, self.cert_password or ""
                         )
                     else:
                         # PEM file only contains certificate, need separate key file
@@ -317,15 +319,18 @@ class SolacePenTest:
                     elif self.cert_file:
                         # Handle different certificate file types for cross-VPN testing
                         if self.cert_file.lower().endswith(('.p12', '.pfx')):
+                            # PKCS12 files contain both cert and key
+                            # For PKCS12, we need to use the same file for both cert and key parameters
                             auth_strategy = ClientCertificateAuthentication.of(
-                                self.cert_file, self.cert_password or ""
+                                self.cert_file, self.cert_file, self.cert_password or ""
                             )
                         else:
                             # PEM files - check if they contain private key or need separate key file
                             if self._pem_contains_private_key(self.cert_file):
                                 # PEM file contains both cert and private key
+                                # Use the same file for both cert and key parameters
                                 auth_strategy = ClientCertificateAuthentication.of(
-                                    self.cert_file, self.cert_password or ""
+                                    self.cert_file, self.cert_file, self.cert_password or ""
                                 )
                             else:
                                 # PEM file only contains certificate, need separate key file
