@@ -162,8 +162,11 @@ python SolaceClient.py --server host:55443 --cert-file client.p12 --vpn default 
 ### Basic Connection Validation
 
 ```bash
-# Basic authentication
+# Basic authentication (will prompt for password)
 python SolaceClient.py --server hostname:55443 --username testuser --vpn default --validate
+
+# Basic authentication with password provided
+python SolaceClient.py --server hostname:55443 --username testuser --password mypassword --vpn default --validate
 
 # OAuth authentication
 python SolaceClient.py --server hostname:55443 --oauth-token "your-oauth-token" --vpn default --validate
@@ -227,8 +230,11 @@ python SolaceClient.py --server hostname:55443 --username testuser --vpn default
 ### SEMP API Testing
 
 ```bash
-# Test SEMP API connection with basic auth
+# Test SEMP API connection with basic auth (will prompt for password)
 python SolaceSEMP.py --server hostname:8080 --username admin --test-connection
+
+# Test SEMP API connection with basic auth and password provided
+python SolaceSEMP.py --server hostname:8080 --username admin --password mypassword --test-connection
 
 # Test SEMP API connection with client certificate
 python SolaceSEMP.py --server hostname:8080 --cert-file client.pem --test-connection
@@ -237,7 +243,7 @@ python SolaceSEMP.py --server hostname:8080 --cert-file client.pem --test-connec
 python SolaceSEMP.py --server hostname:8080 --cert-file cert.pem --key-file key.pem --test-connection
 
 # Comprehensive enumeration
-python SolaceSEMP.py --server hostname:8080 --username admin --enumerate-all --output security_report.json
+python SolaceSEMP.py --server hostname:8080 --username admin --password mypassword --enumerate-all --output security_report.json
 
 # Test administrative access
 python SolaceSEMP.py --server hostname:8080 --username admin --test-admin-access
@@ -263,6 +269,7 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 #### Connection Parameters
 - `--server HOST:PORT` - Solace broker address (required)
 - `--username USERNAME` - Username for basic authentication
+- `--password PASSWORD` - Password for basic authentication (if not provided, will prompt)
 - `--vpn VPN_NAME` - VPN name on the broker (required)
 - `--no-tls` - Disable TLS encryption (optional)
 
@@ -288,6 +295,7 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 #### Connection Parameters
 - `--server HOST:PORT` - SEMP API server address (required)
 - `--username USERNAME` - Username for basic authentication
+- `--password PASSWORD` - Password for basic authentication (if not provided, will prompt)
 - `--no-tls` - Use HTTP instead of HTTPS
 
 #### Authentication Options

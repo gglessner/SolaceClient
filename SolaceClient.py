@@ -597,6 +597,7 @@ def main():
     # Connection arguments
     parser.add_argument("--server", required=True, help="Solace server in host:port format")
     parser.add_argument("--username", help="Username for basic authentication")
+    parser.add_argument("--password", help="Password for basic authentication (if not provided, will prompt)")
     parser.add_argument("--vpn", required=True, help="VPN name on the Solace broker")
     parser.add_argument("--no-tls", action="store_true", help="Disable TLS (use unencrypted connection)")
     
@@ -643,7 +644,10 @@ def main():
     # Prompt for passwords based on authentication method
     try:
         if args.username:
-            password = getpass.getpass(f"Password for user '{args.username}': ")
+            if args.password:
+                password = args.password
+            else:
+                password = getpass.getpass(f"Password for user '{args.username}': ")
             if not password:
                 print("Error: Password cannot be empty")
                 sys.exit(1)
