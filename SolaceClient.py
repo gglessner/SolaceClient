@@ -367,13 +367,18 @@ class SolacePenTest:
         
         return auth_results
     
-    def monitor_queues(self, queue_names: List[str], output_dir: Optional[str] = None):
+    def monitor_queues(self, queue_names: List[str], output_dir: Optional[str] = None, read_existing: bool = False):
         """Monitor messages from specified queues (WARNING: DESTRUCTIVE - messages will be consumed/removed)."""
         if not self.is_connected:
             if not self.connect():
                 return
         
-        print(f"WARNING: Starting DESTRUCTIVE monitoring of queues (messages will be consumed): {queue_names}")
+        if read_existing:
+            print(f"WARNING: Starting DESTRUCTIVE reading of existing messages and monitoring of queues: {queue_names}")
+            print("NOTE: Will first read existing messages, then continue monitoring for new messages")
+        else:
+            print(f"WARNING: Starting DESTRUCTIVE monitoring of queues (messages will be consumed): {queue_names}")
+            print("NOTE: Only monitoring new messages - use --read-queue to read existing messages first")
         print("NOTE: Solace Python API does not support non-destructive queue browsing")
         
         # Safety confirmation for production environments
@@ -405,17 +410,77 @@ class SolacePenTest:
                 receivers.append((receiver, queue_name))
                 print(f"Started monitoring queue: {queue_name}")
             
-            # Monitor messages
+            # Read existing messages first if requested
+            if read_existing:
+                print("Reading existing messages from queues...")
+                existing_count = 0
+                for receiver, queue_name in receivers:
+                    queue_count = 0
+                    print(f"Reading existing messages from queue: {queue_name}")
+                    
+                    # Keep reading until no more messages are immediately available
+                    while not self.stop_event.is_set():
+                        try:
+                            # Use shorter timeout for existing messages
+                            message = receiver.receive_message(timeout_ms=100)
+                            if message:
+                                queue_count += 1
+                                existing_count += 1
+                                timestamp = int(time.time() * 1000)  # Epoch milliseconds
+                                print(f"[{datetime.now()}] Queue '{queue_name}' (existing #{queue_count}): {message.get_payload_as_string()}")
+                                
+                                if output_dir:
+                                    filename = f"queue_{queue_name}_{timestamp}_existing.json"
+                                    filepath = Path(output_dir) / filename
+                                    
+                                    message_data = {
+                                        "source_type": "queue",
+                                        "source_name": queue_name,
+                                        "timestamp": timestamp,
+                                        "datetime": datetime.now().isoformat(),
+                                        "payload": message.get_payload_as_string(),
+                                        "message_type": "existing",
+                                        "properties": {}
+                                    }
+                                    
+                                    # Add message properties if available
+                                    try:
+                                        if hasattr(message, 'get_properties'):
+                                            message_data["properties"] = message.get_properties()
+                                    except:
+                                        pass
+                                    
+                                    with open(filepath, 'w') as f:
+                                        json.dump(message_data, f, indent=2)
+                            else:
+                                # No more messages available immediately
+                                break
+                        except Exception as e:
+                            if "timeout" not in str(e).lower():
+                                print(f"Error reading existing messages from queue {queue_name}: {e}")
+                            break
+                    
+                    if queue_count > 0:
+                        print(f"Read {queue_count} existing messages from queue: {queue_name}")
+                    else:
+                        print(f"No existing messages found in queue: {queue_name}")
+                
+                if existing_count > 0:
+                    print(f"Finished reading {existing_count} existing messages. Now monitoring for new messages...")
+                else:
+                    print("No existing messages found in any queues. Now monitoring for new messages...")
+            
+            # Monitor for new messages
             while not self.stop_event.is_set():
                 for receiver, queue_name in receivers:
                     try:
                         message = receiver.receive_message(timeout_ms=1000)
                         if message:
                             timestamp = int(time.time() * 1000)  # Epoch milliseconds
-                            print(f"[{datetime.now()}] Queue '{queue_name}': {message.get_payload_as_string()}")
+                            print(f"[{datetime.now()}] Queue '{queue_name}' (new): {message.get_payload_as_string()}")
                             
                             if output_dir:
-                                filename = f"queue_{queue_name}_{timestamp}.json"
+                                filename = f"queue_{queue_name}_{timestamp}_new.json"
                                 filepath = Path(output_dir) / filename
                                 
                                 message_data = {
@@ -424,6 +489,7 @@ class SolacePenTest:
                                     "timestamp": timestamp,
                                     "datetime": datetime.now().isoformat(),
                                     "payload": message.get_payload_as_string(),
+                                    "message_type": "new",
                                     "properties": {}
                                 }
                                 
@@ -611,6 +677,7 @@ def main():
     parser.add_argument("--info", action="store_true", help="Gather broker information")
     parser.add_argument("--check-auth", action="store_true", help="Test authorization against administrative resources")
     parser.add_argument("--monitor-queues", nargs="+", help="Monitor specified queues (WARNING: DESTRUCTIVE - consumes messages)")
+    parser.add_argument("--read-queue", nargs="+", help="Read existing messages from queues then continue monitoring (WARNING: DESTRUCTIVE - consumes messages)")
     parser.add_argument("--monitor-topics", nargs="+", help="Monitor specified topics")
     parser.add_argument("--subscribe-wildcard", help="Subscribe to topics starting with specified string")
     parser.add_argument("--send-from-files", help="Send messages from logged files in specified directory")
@@ -703,13 +770,16 @@ def main():
         if args.monitor_queues:
             pentest.monitor_queues(args.monitor_queues, args.output_dir)
         
+        if args.read_queue:
+            pentest.monitor_queues(args.read_queue, args.output_dir, read_existing=True)
+        
         if args.monitor_topics or args.subscribe_wildcard:
             topics = args.monitor_topics or []
             pentest.monitor_topics(topics, args.output_dir, args.subscribe_wildcard)
         
         # If no specific operation was requested, show help
-        if not any([args.validate, args.info, args.check_auth, args.monitor_queues, args.monitor_topics, 
-                   args.subscribe_wildcard, args.send_from_files]):
+        if not any([args.validate, args.info, args.check_auth, args.monitor_queues, args.read_queue, 
+                   args.monitor_topics, args.subscribe_wildcard, args.send_from_files]):
             parser.print_help()
     
     except KeyboardInterrupt:

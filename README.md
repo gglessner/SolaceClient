@@ -197,11 +197,16 @@ python SolaceClient.py --server hostname:55443 --username testuser --vpn default
 
 ### Monitor Queues (Destructive - Consumes Messages)
 
-**⚠️ WARNING: This operation consumes/removes messages from queues!**
+**WARNING: This operation consumes/removes messages from queues!**
 
 ```bash
+# Monitor only new messages (existing messages remain in queue)
 python SolaceClient.py --server hostname:55443 --username testuser --vpn default \
     --monitor-queues queue1 queue2 -dir ./queue_messages
+
+# Read existing messages first, then continue monitoring for new messages
+python SolaceClient.py --server hostname:55443 --username testuser --vpn default \
+    --read-queue queue1 queue2 -dir ./queue_messages
 ```
 
 **Note**: The Solace Python API does not support non-destructive queue browsing. Messages will be permanently removed from the queue.
@@ -282,7 +287,8 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 - `--validate` - Test connection and exit
 - `--info` - Gather and display broker information
 - `--check-auth` - Test authorization against administrative resources
-- `--monitor-queues QUEUE [QUEUE ...]` - Monitor specified queues (WARNING: Destructive - consumes messages)
+- `--monitor-queues QUEUE [QUEUE ...]` - Monitor specified queues for new messages only (WARNING: Destructive - consumes messages)
+- `--read-queue QUEUE [QUEUE ...]` - Read existing messages from queues then continue monitoring (WARNING: Destructive - consumes messages)
 - `--monitor-topics TOPIC [TOPIC ...]` - Monitor specified topics
 - `--subscribe-wildcard PREFIX` - Subscribe to topics starting with prefix
 - `--send-from-files DIRECTORY` - Replay messages from logged files
@@ -327,7 +333,7 @@ python SolaceVPNscan.py --server hostname:55555 --no-tls --vpn-list vpn_names.tx
 - `--csv FILE` - Save results to CSV file
 
 #### Important Notes
-- **VPN names are case-sensitive** in Solace (e.g., "default" ≠ "Default" ≠ "DEFAULT")
+- **VPN names are case-sensitive** in Solace (e.g., "default" != "Default" != "DEFAULT")
 - Use `--case-variations` to automatically test common case variations
 - Consider testing both common naming patterns and case variations for thorough enumeration
 
@@ -351,9 +357,14 @@ Captured messages are saved as JSON files with the following structure:
   "timestamp": 1634567890123,
   "datetime": "2021-10-18T10:31:30.123456",
   "payload": "message content",
+  "message_type": "new|existing",
   "properties": {}
 }
 ```
+
+**Note**: Queue messages include a `message_type` field:
+- `"existing"` - Messages that were already in the queue when monitoring started (only with `--read-queue`)
+- `"new"` - Messages that arrived after monitoring started
 
 ## Limitations
 
