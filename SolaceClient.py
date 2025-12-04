@@ -367,6 +367,72 @@ class SolacePenTest:
         
         return auth_results
     
+    def _check_queue_status(self, queue_names: List[str]):
+        """Check queue status using SEMP API for debugging purposes."""
+        try:
+            import requests
+            import base64
+            
+            # Build SEMP URL (try common SEMP ports)
+            semp_ports = [8080, 8443, 943]  # Common SEMP ports
+            
+            for port in semp_ports:
+                try:
+                    protocol = "https" if port in [8443, 943] else "http"
+                    base_url = f"{protocol}://{self.host}:{port}/SEMP/v2"
+                    
+                    # Setup basic auth
+                    auth_string = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
+                    headers = {
+                        'Authorization': f'Basic {auth_string}',
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                    
+                    for queue_name in queue_names:
+                        try:
+                            url = f"{base_url}/monitor/msgVpns/{self.vpn}/queues/{queue_name}"
+                            response = requests.get(url, headers=headers, timeout=5, verify=False)
+                            
+                            if response.status_code == 200:
+                                queue_data = response.json().get('data', {})
+                                msg_count = queue_data.get('msgSpoolUsage', 0)
+                                access_type = queue_data.get('accessType', 'unknown')
+                                owner = queue_data.get('owner', 'none')
+                                consumers = queue_data.get('bindCount', 0)
+                                
+                                print(f"Queue '{queue_name}': {msg_count} messages, access={access_type}, owner={owner}, consumers={consumers}")
+                                
+                                if msg_count == 0:
+                                    print(f"  -> Queue is empty - no existing messages to read")
+                                elif consumers > 0:
+                                    print(f"  -> WARNING: {consumers} consumer(s) already connected - may prevent exclusive access")
+                                elif access_type == 'exclusive' and owner != 'none':
+                                    print(f"  -> WARNING: Queue has exclusive owner '{owner}' - may prevent access")
+                                else:
+                                    print(f"  -> Queue should be accessible for reading")
+                            elif response.status_code == 404:
+                                print(f"Queue '{queue_name}': NOT FOUND - queue may not exist")
+                            elif response.status_code == 401:
+                                print(f"Queue '{queue_name}': ACCESS DENIED - insufficient SEMP permissions")
+                            else:
+                                print(f"Queue '{queue_name}': SEMP error {response.status_code}")
+                        except Exception as e:
+                            print(f"Queue '{queue_name}': SEMP check failed - {e}")
+                    
+                    # If we got here, SEMP worked, so break
+                    break
+                    
+                except Exception:
+                    continue  # Try next port
+            else:
+                print("Could not connect to SEMP API for queue status check")
+                
+        except ImportError:
+            print("requests library not available for SEMP queue status check")
+        except Exception as e:
+            print(f"Queue status check failed: {e}")
+    
     def monitor_queues(self, queue_names: List[str], output_dir: Optional[str] = None, read_existing: bool = False):
         """Monitor messages from specified queues (WARNING: DESTRUCTIVE - messages will be consumed/removed)."""
         if not self.is_connected:
@@ -380,6 +446,11 @@ class SolacePenTest:
             print(f"WARNING: Starting DESTRUCTIVE monitoring of queues (messages will be consumed): {queue_names}")
             print("NOTE: Only monitoring new messages - use --read-queue to read existing messages first")
         print("NOTE: Solace Python API does not support non-destructive queue browsing")
+        
+        # Check queue status via SEMP if possible
+        if read_existing:
+            print("\nDEBUG: Checking queue status...")
+            self._check_queue_status(queue_names)
         
         # Safety confirmation for production environments
         try:
@@ -399,16 +470,34 @@ class SolacePenTest:
         
         try:
             for queue_name in queue_names:
-                queue = Queue.durable_exclusive_queue(queue_name)
+                # Try different queue binding strategies
+                try:
+                    # First try durable exclusive queue (original method)
+                    queue = Queue.durable_exclusive_queue(queue_name)
+                    print(f"Attempting exclusive binding to queue: {queue_name}")
+                except Exception as e:
+                    print(f"Exclusive binding failed for {queue_name}: {e}")
+                    try:
+                        # Try non-exclusive durable queue
+                        queue = Queue.durable_non_exclusive_queue(queue_name)
+                        print(f"Attempting non-exclusive binding to queue: {queue_name}")
+                    except Exception as e2:
+                        print(f"Non-exclusive binding also failed for {queue_name}: {e2}")
+                        continue
                 
                 # Create persistent message receiver
                 receiver = self.messaging_service.create_persistent_message_receiver_builder() \
                     .with_message_selector("") \
                     .build(queue)
                 
-                receiver.start()
-                receivers.append((receiver, queue_name))
-                print(f"Started monitoring queue: {queue_name}")
+                try:
+                    receiver.start()
+                    receivers.append((receiver, queue_name))
+                    print(f"Successfully started monitoring queue: {queue_name}")
+                except Exception as e:
+                    print(f"Failed to start receiver for queue {queue_name}: {e}")
+                    print(f"This might indicate: queue doesn't exist, no permissions, or another consumer is connected")
+                    continue
             
             # Read existing messages first if requested
             if read_existing:
@@ -419,11 +508,16 @@ class SolacePenTest:
                     print(f"Reading existing messages from queue: {queue_name}")
                     
                     # Keep reading until no more messages are immediately available
-                    while not self.stop_event.is_set():
+                    print(f"  Attempting to read existing messages (timeout=100ms per attempt)...")
+                    consecutive_timeouts = 0
+                    max_consecutive_timeouts = 3
+                    
+                    while not self.stop_event.is_set() and consecutive_timeouts < max_consecutive_timeouts:
                         try:
                             # Use shorter timeout for existing messages
                             message = receiver.receive_message(timeout_ms=100)
                             if message:
+                                consecutive_timeouts = 0  # Reset timeout counter
                                 queue_count += 1
                                 existing_count += 1
                                 timestamp = int(time.time() * 1000)  # Epoch milliseconds
@@ -453,11 +547,16 @@ class SolacePenTest:
                                     with open(filepath, 'w') as f:
                                         json.dump(message_data, f, indent=2)
                             else:
-                                # No more messages available immediately
-                                break
+                                # No message received - increment timeout counter
+                                consecutive_timeouts += 1
+                                if consecutive_timeouts == 1:
+                                    print(f"  No immediate messages available from queue '{queue_name}' (timeout #{consecutive_timeouts})")
+                                
                         except Exception as e:
                             if "timeout" not in str(e).lower():
                                 print(f"Error reading existing messages from queue {queue_name}: {e}")
+                                print(f"  This could indicate: permission issues, queue configuration, or connection problems")
+                            consecutive_timeouts += 1
                             break
                     
                     if queue_count > 0:
